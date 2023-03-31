@@ -6,8 +6,7 @@
     <meta content='width=device-width; height=device-height; initial-scale=1.0; maximum-scale=1.0; user-scalable=0;' name='viewport' />
     <meta name="viewport" content="width=device-width" />
     <meta name="license" content="
-        Copyright 2013 Google, Abram Hindle
-        
+        Copyright 2013 Google, Abram Hindle, 2023 Sihan Ibrahim
         Licensed under the Apache License, Version 2.0 (the "License");
         you may not use this file except in compliance with the License.
         You may obtain a copy of the License at
@@ -44,20 +43,35 @@ debug("Test");
 
 world = {};
 
-//XXX: TODO Make this prettier!
-function drawCircle(context,entity) {
-    with(context) {
-        beginPath();                
-        lineWidth = 3;
-        var x = entity["x"];
-        var y = entity["y"];
-        //moveTo(x,y);
-        fillStyle = entity["colour"];
-        strokeStyle = fillStyle;
-        arc(x, y, (entity["radius"])?entity["radius"]:50, 0, 2.0 * Math.PI, false);  
-        stroke();                                
-    }
+function drawCircle(context, entity) {
+  var x = entity["x"];
+  var y = entity["y"];
+  var radius = (entity["radius"]) ? entity["radius"] : 50;
+  var color = entity["colour"];
+
+  // Create a radial gradient
+  var gradient = context.createRadialGradient(x, y, 0, x, y, radius);
+  gradient.addColorStop(0, color);
+  gradient.addColorStop(1, "white");
+
+  // Draw the circle with gradient fill
+  context.beginPath();
+  context.fillStyle = gradient;
+  context.arc(x, y, radius, 0, 2.0 * Math.PI, false);
+  context.fill();
+
+  // Add a shadow to the circle
+  context.shadowColor = "rgba(0, 0, 0, 0.5)";
+  context.shadowBlur = 5;
+  context.shadowOffsetX = 3;
+  context.shadowOffsetY = 3;
+
+  // Draw the circle outline
+  context.lineWidth = 3;
+  context.strokeStyle = color;
+  context.stroke();
 }
+
 
 function prepEntity(entity) {
     if (!entity["colour"]) {
@@ -123,14 +137,18 @@ function getPosition(e) {
 
 function addEntity(entity, data) {
     world[entity] = data;
-    drawNextFrame(); // (but should we?)
-    //XXX: Send a XHTML Request that updates the entity you just modified!
+    drawNextFrame();
+    // Send the entity update to the server
+    socket.send(JSON.stringify({entity: entity, data: data}));
 }
+
 var counter = 0;
 function addEntityWithoutName(data) {
-    var name = "X"+(counter++)%100;
-    addEntity(name,data);
+    var name = "X" + (counter++) % 100;
+    addEntity(name, data);
 }
+
+
 
 // canvas + mouse/touch is complicated 
 // I give you this because well the mouse/touch stuff is a total
@@ -231,11 +249,11 @@ mouse = (function() {
 // Add the application specific mouse listeners!
 //XXX: TODO Make these prettier!
 mouse.mousedowners.push(function(x,y,clicked,e) {
-    addEntityWithoutName({'x':x,'y':y,'colour':'blue'});
+    addEntityWithoutName({'x':x,'y':y,'colour':'blue', 'radius':20});
 });
 
 mouse.mouseuppers.push(function(x,y,clicked,e) {
-    addEntityWithoutName({'x':x,'y':y,'colour':'red'});
+    addEntityWithoutName({'x':x,'y':y,'colour':'brown', radius:20});
 });
 
 mouse.mousedraggers.push(function(x,y,clicked,e) {
@@ -250,25 +268,38 @@ function update() {
 
 
 function wsSetup() {
-    var url = "ws://"+host+"/subscribe";   
+    var url = "ws://" + host + "/subscribe";
     socket = new WebSocket(url);
+
     socket.onopen = function() {
-        //XXX: TODO What are you going to do here?
+        socket.send(JSON.stringify({type: "init"}));
     };
-    socket.onerror = function(msg) {
-        debug("WebSocket Error:" + msg.data);
+
+    socket.onerror = function(error) {
+        console.error("WebSocket Error: " + error);
     };
+
     socket.onmessage = function(msg) {  
-        try {
-            debug("WebSocket Recv:" + msg.data);
-            //XXX: TODO What are you going to do here?            
-        } catch (e) {
-            alert("socket on message: " + e);
-        }
-    }; 
+    try {
+        debug("WebSocket Recv:" + msg.data);
+        var data = JSON.parse(msg.data);
+        if (data.type === "update") {
+            world = data.world;
+            drawNextFrame();
+        }            
+    } catch (e) {
+        alert("socket on message: " + e);
+    }
+};
+
+    socket.onclose = function() {
+        console.log("WebSocket connection closed");
+        setTimeout(wsSetup, 5000); // try to reconnect after 5 seconds
+    };
 }
 
 wsSetup();
+
 
 
 

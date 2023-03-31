@@ -77,6 +77,7 @@ class WorldClient(WebSocketClient):
             self.count += 1
         if (self.count >= calls):
             self.close(reason='Bye bye')
+        
 
     def incoming(self):
         while self.count < calls:
